@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--bg-color);
+  --color-card: var(--card-bg);
+  --color-main: var(--text-main);
+  --color-muted: var(--text-muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-full: var(--radius-full);
+}
+
+@layer base {
+  :root {
+    /* Dark Mode Palette */
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --primary: #257bf4;
+    --primary-hover: #1d4ed8;
+    --danger: #ef4444;
+    --success: #10b981;
+    --border: #334155;
+    
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 16px;
+    --radius-full: 9999px;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    @apply bg-background text-main leading-relaxed antialiased;
+  }
+
+  input, textarea, button {
+    font-family: inherit;
+  }
+
+  button {
+    cursor: pointer;
+    border: none;
+    background: none;
+    outline: none;
+  }
+}
+
+@layer components {
+  .description {
+    font-size: 10px;
+    font-style: italic;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-full font-semibold text-[16px] transition-all w-full gap-2;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #257bf4, #1d4ed8);
+    @apply text-white hover:opacity-90;
+    box-shadow: 0 4px 14px 0 rgba(37, 123, 244, 0.39);
+  }
+
+  .btn-outline {
+    @apply bg-transparent border border-border text-main hover:bg-card;
+  }
+
+  .card {
+    @apply bg-card rounded-lg p-4 shadow-sm border border-white/5;
+  }
+}
