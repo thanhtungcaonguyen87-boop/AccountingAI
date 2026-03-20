@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Mic, Send, X } from "lucide-react";
+import { Mic, Send, X, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 
@@ -32,10 +32,10 @@ export const HeroInput: React.FC<HeroInputProps> = ({
 
       if (data) {
         const uniqueKhachHang = Array.from(
-          new Set(data.map((d) => d.khach_hang).filter(Boolean))
+          new Set(data.map((d) => d.khach_hang).filter(Boolean)),
         );
         const uniqueSanPham = Array.from(
-          new Set(data.map((d) => d.san_pham).filter(Boolean))
+          new Set(data.map((d) => d.san_pham).filter(Boolean)),
         );
         setSuggestions({
           khach_hang: uniqueKhachHang,
@@ -104,30 +104,13 @@ export const HeroInput: React.FC<HeroInputProps> = ({
   return (
     <div className="card mb-4 !p-0">
       <div className="p-4">
-        <h2 className="text-[18px] font-bold mb-3 text-white">
-          Nhập đơn hàng
-        </h2>
+        <h2 className="text-[18px] font-bold mb-3 text-main">Nhập đơn hàng</h2>
 
         <div className="relative">
           {showSuggestions &&
             (suggestions.khach_hang.length > 0 ||
               suggestions.san_pham.length > 0) && (
               <div className="absolute top-full left-0 mt-2 w-full max-h-[180px] overflow-y-auto bg-card border border-border rounded-md shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 z-50 flex flex-col gap-3">
-                <div className="flex justify-between items-center mb-1 sticky top-0 bg-card z-10 pb-1 border-b border-border/50">
-                  <span className="text-[13px] font-bold text-muted uppercase">
-                    Gợi ý chèn nhanh
-                  </span>
-                  <button
-                    type="button"
-                    title="Đóng"
-                    onClick={() => setShowSuggestions(false)}
-                    className="text-muted hover:text-white transition-colors bg-white/5 rounded-full p-1"
-                    onMouseDown={(e) => e.preventDefault()}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-
                 {suggestions.khach_hang.length > 0 && (
                   <div>
                     <div className="text-[12px] text-muted mb-1.5 ml-1">
@@ -161,7 +144,7 @@ export const HeroInput: React.FC<HeroInputProps> = ({
                         <button
                           key={`sp-${idx}`}
                           type="button"
-                          className="px-3 py-1 text-[13px] bg-white/5 text-main hover:text-white border border-white/10 rounded-full hover:bg-white/10 transition-colors shadow-sm"
+                          className="px-3 py-1 text-[13px] bg-primary/10 text-main hover:text-primary border border-border rounded-full hover:bg-primary/20 transition-colors shadow-sm"
                           onMouseDown={(e) => {
                             e.preventDefault();
                             insertSuggestion(sp);
@@ -178,18 +161,30 @@ export const HeroInput: React.FC<HeroInputProps> = ({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onFocus={() => setShowSuggestions(true)}
             placeholder="Ví dụ: Anh Minh in 100 tờ Phiếu thu A4 giá 3k/tờ..."
             rows={3}
-            className="w-full bg-black/20 border border-border rounded-md p-3 pr-[54px] text-main resize-none min-h-[100px] outline-none focus:border-primary transition-colors"
+            className="w-full bg-card/50 border border-border rounded-md p-3 pl-[24px] pr-[54px] text-main resize-none min-h-[100px] outline-none focus:border-primary transition-colors"
           />
+          <div className="absolute left-3 bottom-[-4px]">
+            <button
+              onClick={() => setShowSuggestions(!showSuggestions)}
+              className="w-8 h-8 rounded-full flex items-center justify-center bg-card border border-border text-muted hover:text-primary transition-all shadow-sm"
+              title={showSuggestions ? "Thu nhỏ gợi ý" : "Hiển thị gợi ý"}
+            >
+              {showSuggestions ? (
+                <ChevronUp size={20} />
+              ) : (
+                <ChevronDown size={20} />
+              )}
+            </button>
+          </div>
           <div className="absolute right-2 bottom-3 flex flex-col gap-2">
             <button
               onClick={handleListen}
-              className={`w-9 h-9 rounded-full flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.2)] transition-all duration-200 ${
+              className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm border border-border transition-all duration-200 ${
                 isListening
                   ? "bg-danger text-white"
-                  : "bg-white/10 text-muted hover:text-white"
+                  : "bg-card text-muted hover:text-primary"
               }`}
               title="Nhập bằng giọng nói"
             >

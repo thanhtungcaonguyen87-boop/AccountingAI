@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from "react";
 import { HeroInput } from "../components/ai/HeroInput";
 import { AIPreview } from "../components/ai/AIPreview";
@@ -11,9 +12,16 @@ import {
   Trash2,
   Save,
   X,
+  Share2,
+  Image as ImageIcon,
+  Copy as CopyIcon,
+  FileCode,
+  FileSpreadsheet,
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { toPng, toBlob } from "html-to-image";
+import * as XLSX from "xlsx";
 
 export const ChuaThanhToan: React.FC = () => {
   const { user } = useAuth();
@@ -33,31 +41,37 @@ export const ChuaThanhToan: React.FC = () => {
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editRowData, setEditRowData] = useState<any>(null);
 
-  const fetchRecords = async (silent = false) => {
-    if (!user) return;
-    if (!silent) setIsLoadingData(true);
-    const { data, error } = await supabase
-      .from("chi_tiet")
-      .select("*")
-      .is("id_thanh_toan", null)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+  // Export state
+  const [openExportId, setOpenExportId] = useState<string | null>(null);
 
-    if (!error && data) {
-      setRecords(data);
-      // Auto expand first group
-      if (data.length > 0) {
-        setExpandedGroups({ [data[0].khach_hang]: true });
+  const fetchRecords = React.useCallback(
+    async (silent = false) => {
+      if (!user) return;
+      const { data, error } = await supabase
+        .from("chi_tiet")
+        .select("*")
+        .is("id_thanh_toan", null)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setRecords(data);
+        // Auto expand first group
+        if (data.length > 0) {
+          setExpandedGroups({ [data[0].khach_hang]: true });
+        }
       }
-    }
-    if (!silent) setIsLoadingData(false);
-  };
+      if (!silent) setIsLoadingData(false);
+    },
+    [user],
+  );
 
   useEffect(() => {
     if (user?.id) {
-      fetchRecords();
+      // Defer to break synchronous render chain (Clean Code)
+      Promise.resolve().then(() => fetchRecords());
     }
-  }, [user?.id]);
+  }, [user?.id, fetchRecords]);
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -205,7 +219,7 @@ export const ChuaThanhToan: React.FC = () => {
 
   const handleDeleteParsedData = async (id: string) => {
     setRecords((prev) => prev.filter((r) => r.id !== id));
-    
+
     const { error } = await supabase.from("chi_tiet").delete().eq("id", id);
     if (error) {
       fetchRecords(true); // Revert optimistic update
@@ -255,14 +269,106 @@ export const ChuaThanhToan: React.FC = () => {
     setExpandedGroups((prev) => ({ ...prev, [customer]: !prev[customer] }));
   };
 
+  const handleExport = async (type: string, khach_hang: string) => {
+    const element = document.getElementById(`customer-card-${khach_hang}`);
+    if (!element) return;
+
+    const customerItems = groupedOrders[khach_hang];
+    const fileName = `CongNo_${khach_hang.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}`;
+
+    try {
+      if (type === "image") {
+        const dataUrl = await toPng(element, {
+          backgroundColor: "#111",
+          filter: (node: HTMLElement) => {
+            return !node.classList?.contains("export-exclude");
+          },
+          style: {
+            borderRadius: "0",
+          },
+        });
+        const link = document.createElement("a");
+        link.download = `${fileName}.png`;
+        link.href = dataUrl;
+        link.click();
+      } else if (type === "copy") {
+        if (!navigator.clipboard || !window.ClipboardItem) {
+          alert(
+            "Trình duyệt không hỗ trợ sao chép hình ảnh. Hãy thử lưu thành file Image.",
+          );
+          return;
+        }
+
+        try {
+          // Use Promise-based ClipboardItem to solve "user activation" expiration
+          const copyPromise = toBlob(element, {
+            backgroundColor: "#111",
+            filter: (node: HTMLElement) =>
+              !node.classList?.contains("export-exclude"),
+          }).then((blob) => {
+            if (!blob) throw new Error("Không thể tạo hình ảnh");
+            return blob;
+          });
+
+          const item = new ClipboardItem({
+            "image/png": copyPromise,
+          });
+
+          await navigator.clipboard.write([item]);
+          alert("Đã sao chép hình ảnh vào bộ nhớ tạm!");
+        } catch (clipErr) {
+          console.error("Clipboard error:", clipErr);
+          alert(
+            "Lỗi: Không thể sao chép. Hãy thử lưu file hoặc kiểm tra quyền truy cập (HTTPS/Localhost).",
+          );
+        }
+      } else if (type === "xlsx") {
+        const data = customerItems.map((item) => ({
+          Ngày: item.ngay,
+          "Sản phẩm": item.san_pham,
+          ĐVT: item.dvt,
+          "Số lượng": item.so_luong,
+          "Đơn giá": item.don_gia,
+          "Thành tiền": item.thanh_tien,
+          "Ghi chú": item.ghi_chu || "",
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "CongNo");
+        XLSX.writeFile(workbook, `${fileName}.xlsx`);
+      } else if (type === "csv") {
+        const headers =
+          "Ngày,Sản phẩm,ĐVT,Số lượng,Đơn giá,Thành tiền,Ghi chú\n";
+        const rows = customerItems
+          .map(
+            (item) =>
+              `${item.ngay},${item.san_pham},${item.dvt},${item.so_luong},${item.don_gia},${item.thanh_tien},"${item.ghi_chu || ""}"`,
+          )
+          .join("\n");
+        const blob = new Blob(["\ufeff" + headers + rows], {
+          type: "text/csv;charset=utf-8",
+        });
+        const link = document.createElement("a");
+        link.download = `${fileName}.csv`;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+      }
+    } catch (err) {
+      console.error("Export error:", err);
+      alert("Lỗi khi xuất dữ liệu");
+    }
+    setOpenExportId(null);
+  };
+
   // Group records by customer
   const groupedOrders = records.reduce(
-    (acc, curr) => {
+    (acc: Record<string, any[]>, curr: any) => {
       if (!acc[curr.khach_hang]) acc[curr.khach_hang] = [];
       acc[curr.khach_hang].push(curr);
       return acc;
     },
-    {} as Record<string, any[]>,
+    {},
   );
 
   // Filter by search
@@ -271,7 +377,7 @@ export const ChuaThanhToan: React.FC = () => {
   );
 
   const totalDebt = records.reduce(
-    (sum, item) => sum + (Number(item.thanh_tien) || 0),
+    (sum: number, item: any) => sum + (Number(item.thanh_tien) || 0),
     0,
   );
 
@@ -280,7 +386,7 @@ export const ChuaThanhToan: React.FC = () => {
 
   return (
     <div className="flex flex-col md:flex-row md:items-start gap-6 pb-8">
-      <div className="sticky top-[65px] z-10 md:w-[35%] md:min-w-[320px]">
+      <div className="md:sticky md:top-[65px] z-10 md:w-[35%] md:min-w-[320px]">
         {/* AI Input Section */}
         <HeroInput onAnalyze={handleAnalyze} isLoading={isAnalyzing} />
 
@@ -313,14 +419,7 @@ export const ChuaThanhToan: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center justify-between mb-4 px-1">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              className="w-[18px] h-[18px] accent-primary"
-            />
-            <span className="text-[15px]">Chọn tất cả</span>
-          </label>
+        <div className="flex items-center justify-end mb-4 px-1">
           <div className="font-bold text-danger">
             Tổng nợ: {totalDebt.toLocaleString()} ₫
           </div>
@@ -348,7 +447,11 @@ export const ChuaThanhToan: React.FC = () => {
             );
 
             return (
-              <div key={khach_hang} className="card mb-4 p-0 overflow-hidden">
+              <div
+                key={khach_hang}
+                id={`customer-card-${khach_hang}`}
+                className="card mb-4 p-0 overflow-hidden"
+              >
                 <div
                   className="flex items-center justify-between p-4 cursor-pointer bg-white/2 hover:bg-white/5 transition-colors"
                   onClick={() => toggleGroup(khach_hang)}
@@ -744,12 +847,61 @@ export const ChuaThanhToan: React.FC = () => {
                         </tbody>
                       </table>
                     </div>
-                    <button
-                      onClick={() => handleThanhToan(khach_hang)}
-                      className="btn btn-primary px-4 py-2 text-[14px]"
-                    >
-                      <CheckCircle2 size={16} /> Đã thanh toán
-                    </button>
+                    <div className="flex items-center gap-2 export-exclude">
+                      <div className="relative">
+                        <button
+                          onClick={() =>
+                            setOpenExportId(
+                              openExportId === khach_hang ? null : khach_hang,
+                            )
+                          }
+                          className="btn bg-white/5 border border-border px-4 py-2 text-[14px] flex items-center gap-2 hover:bg-white/10"
+                        >
+                          <Share2 size={16} /> Export
+                        </button>
+                        {openExportId === khach_hang && (
+                          <div className="absolute bottom-full left-0 mb-2 w-[160px] bg-card border border-border rounded-lg shadow-xl z-20 py-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                            <button
+                              onClick={() => handleExport("image", khach_hang)}
+                              className="w-full text-left px-4 py-2 text-[14px] hover:bg-primary/10 flex items-center gap-2"
+                            >
+                              <ImageIcon size={14} className="text-primary" />{" "}
+                              Image
+                            </button>
+                            <button
+                              onClick={() => handleExport("copy", khach_hang)}
+                              className="w-full text-left px-4 py-2 text-[14px] hover:bg-primary/10 flex items-center gap-2"
+                            >
+                              <CopyIcon size={14} className="text-primary" />{" "}
+                              Copy
+                            </button>
+                            <button
+                              onClick={() => handleExport("xlsx", khach_hang)}
+                              className="w-full text-left px-4 py-2 text-[14px] hover:bg-primary/10 flex items-center gap-2"
+                            >
+                              <FileSpreadsheet
+                                size={14}
+                                className="text-primary"
+                              />{" "}
+                              Excel
+                            </button>
+                            <button
+                              onClick={() => handleExport("csv", khach_hang)}
+                              className="w-full text-left px-4 py-2 text-[14px] hover:bg-primary/10 flex items-center gap-2"
+                            >
+                              <FileCode size={14} className="text-primary" />{" "}
+                              CSV
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleThanhToan(khach_hang)}
+                        className="btn btn-primary px-4 py-2 text-[14px]"
+                      >
+                        <CheckCircle2 size={16} /> Đã thanh toán
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

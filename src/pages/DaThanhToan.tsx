@@ -1,43 +1,136 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, CheckCircle, Search, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useEffect } from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CheckCircle,
+  Search,
+  Loader2,
+  Share2,
+  Image as ImageIcon,
+  Copy as CopyIcon,
+  FileSpreadsheet,
+  FileCode,
+} from "lucide-react";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+import { toPng, toBlob } from "html-to-image";
+import * as XLSX from "xlsx";
 
 export const DaThanhToan: React.FC = () => {
   const { user } = useAuth();
   const [expandedBatches, setExpandedBatches] = useState<Record<string, boolean>>({});
   const [records, setRecords] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
 
-  const fetchRecords = async (silent = false) => {
-    if (!user) return;
-    if (!silent) setIsLoadingData(true);
-    const { data, error } = await supabase
-      .from('chi_tiet')
-      .select('*')
-      .not('id_thanh_toan', 'is', null)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-      
-    if (!error && data) {
-      setRecords(data);
-      // Auto expand the most recent batch of the first customer
-      if (data.length > 0) {
-        setExpandedBatches({ [data[0].id_thanh_toan]: true });
+  // Export state
+  const [openExportId, setOpenExportId] = useState<string | null>(null);
+
+  const fetchRecords = React.useCallback(
+    async (silent = false) => {
+      if (!user) return;
+      if (!silent) setIsLoadingData(true);
+      const { data, error } = await supabase
+        .from("chi_tiet")
+        .select("*")
+        .not("id_thanh_toan", "is", null)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setRecords(data);
+        // Auto expand the most recent batch of the first customer
+        if (data.length > 0) {
+          setExpandedBatches({ [data[0].id_thanh_toan]: true });
+        }
       }
-    }
-    if (!silent) setIsLoadingData(false);
-  };
+      if (!silent) setIsLoadingData(false);
+    },
+    [user],
+  );
 
   useEffect(() => {
     if (user?.id) {
-      fetchRecords();
+      Promise.resolve().then(() => fetchRecords());
     }
-  }, [user?.id]);
+  }, [user?.id, fetchRecords]);
 
   const toggleBatch = (batchId: string) => {
-    setExpandedBatches(prev => ({ ...prev, [batchId]: !prev[batchId] }));
+    setExpandedBatches((prev) => ({ ...prev, [batchId]: !prev[batchId] }));
+  };
+
+  const handleExport = async (type: string, batchId: string, khach_hang: string) => {
+    const element = document.getElementById(`batch-card-${batchId}`);
+    if (!element) return;
+
+    const batchItems = groupedData[khach_hang][batchId];
+    const fileName = `DaTT_${khach_hang.replace(/\s+/g, "_")}_${batchId}`;
+
+    try {
+      if (type === "image") {
+        const dataUrl = await toPng(element, {
+          backgroundColor: "#111",
+          filter: (node: HTMLElement) => !node.classList?.contains("export-exclude"),
+          style: { borderRadius: "0" },
+        });
+        const link = document.createElement("a");
+        link.download = `${fileName}.png`;
+        link.href = dataUrl;
+        link.click();
+      } else if (type === "copy") {
+        if (!navigator.clipboard || !window.ClipboardItem) {
+          alert("Trình duyệt không hỗ trợ sao chép hình ảnh.");
+          return;
+        }
+        const copyPromise = toBlob(element, {
+          backgroundColor: "#111",
+          filter: (node: HTMLElement) => !node.classList?.contains("export-exclude"),
+        }).then((blob) => {
+          if (!blob) throw new Error("Không thể tạo hình ảnh");
+          return blob;
+        });
+
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": copyPromise }),
+        ]);
+        alert("Đã sao chép vào bộ nhớ tạm!");
+      } else if (type === "xlsx") {
+        const data = batchItems.map((item) => ({
+          "Khách hàng": item.khach_hang,
+          "Ngày": item.ngay,
+          "Sản phẩm": item.san_pham,
+          "ĐVT": item.dvt,
+          "Số lượng": item.so_luong,
+          "Đơn giá": item.don_gia,
+          "Thành tiền": item.thanh_tien,
+          "Ghi chú": item.ghi_chu || "",
+        }));
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "DaThanhToan");
+        XLSX.writeFile(wb, `${fileName}.xlsx`);
+      } else if (type === "csv") {
+        const headers =
+          "Khách hàng,Ngày,Sản phẩm,ĐVT,Số lượng,Đơn giá,Thành tiền,Ghi chú\n";
+        const rows = batchItems
+          .map(
+            (item) =>
+              `${item.khach_hang},${item.ngay},${item.san_pham},${item.dvt},${item.so_luong},${item.don_gia},${item.thanh_tien},"${item.ghi_chu || ""}"`,
+          )
+          .join("\n");
+        const blob = new Blob(["\ufeff" + headers + rows], {
+          type: "text/csv;charset=utf-8",
+        });
+        const link = document.createElement("a");
+        link.download = `${fileName}.csv`;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+      }
+    } catch (err) {
+      console.error("Export error:", err);
+      alert("Lỗi khi xuất dữ liệu");
+    }
+    setOpenExportId(null);
   };
 
   // Group records by customer, then by payment batch (id_thanh_toan)
@@ -100,7 +193,11 @@ export const DaThanhToan: React.FC = () => {
               }
 
               return (
-                <div key={batchId} className="card mb-4 p-0 overflow-hidden">
+                <div
+                  key={batchId}
+                  id={`batch-card-${batchId}`}
+                  className="card mb-4 p-0 overflow-hidden"
+                >
                   <div 
                     className="flex items-center justify-between p-4 cursor-pointer bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.04)] transition-colors" 
                     onClick={() => toggleBatch(batchId)}
@@ -183,8 +280,81 @@ export const DaThanhToan: React.FC = () => {
                       </div>
                       
                       <div className="flex justify-between items-center pt-2 text-[14px]">
-                        <span className="text-muted font-bold">Tổng đợt thanh toán:</span>
-                        <span className="font-bold text-success">{batchTotal.toLocaleString()} ₫</span>
+                        <div className="flex items-center gap-2 export-exclude">
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenExportId(
+                                  openExportId === batchId ? null : batchId,
+                                );
+                              }}
+                              className="btn bg-white/5 border border-border px-3 py-1.5 text-[12px] flex items-center gap-2 hover:bg-white/10"
+                            >
+                              <Share2 size={14} /> Export
+                            </button>
+                            {openExportId === batchId && (
+                              <div className="absolute bottom-full left-0 mb-2 w-[140px] bg-card border border-border rounded-lg shadow-xl z-20 py-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                <button
+                                  onClick={() =>
+                                    handleExport("image", batchId, khach_hang)
+                                  }
+                                  className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-primary/10 flex items-center gap-2"
+                                >
+                                  <ImageIcon
+                                    size={14}
+                                    className="text-primary"
+                                  />{" "}
+                                  Image
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleExport("copy", batchId, khach_hang)
+                                  }
+                                  className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-primary/10 flex items-center gap-2"
+                                >
+                                  <CopyIcon
+                                    size={14}
+                                    className="text-primary"
+                                  />{" "}
+                                  Copy
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleExport("xlsx", batchId, khach_hang)
+                                  }
+                                  className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-primary/10 flex items-center gap-2"
+                                >
+                                  <FileSpreadsheet
+                                    size={14}
+                                    className="text-primary"
+                                  />{" "}
+                                  Excel
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleExport("csv", batchId, khach_hang)
+                                  }
+                                  className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-primary/10 flex items-center gap-2"
+                                >
+                                  <FileCode
+                                    size={14}
+                                    className="text-primary"
+                                  />{" "}
+                                  CSV
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-muted font-bold">
+                            Tổng đợt:
+                          </span>
+                          <span className="font-bold text-success ml-2">
+                            {batchTotal.toLocaleString()} ₫
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )}

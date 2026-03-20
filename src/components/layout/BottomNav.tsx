@@ -4,7 +4,7 @@ import { CreditCard, CheckCircle, List } from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border flex justify-around py-3 pb-[calc(12px+env(safe-area-inset-bottom))] z-[100]">
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[500px] bg-card border-t border-border flex justify-around py-3 pb-[calc(12px+env(safe-area-inset-bottom))] z-[100] shadow-[0_-4px_10px_rgba(0,0,0,0.1)]">
       <NavLink
         to="/"
         end

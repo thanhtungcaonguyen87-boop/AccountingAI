@@ -7,7 +7,7 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
 
   if (loading) {
     return (
-      <div className="container items-center justify-center">
+      <div className="container mx-auto flex items-center justify-center min-h-screen">
         <div className="text-muted">Đang tải...</div>
       </div>
     );
