@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Mic, Send, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Mic, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 
