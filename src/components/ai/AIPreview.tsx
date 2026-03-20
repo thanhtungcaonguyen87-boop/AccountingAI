@@ -98,10 +98,19 @@ export const AIPreview: React.FC<AIPreviewProps> = ({ isLoading, data, rawInput,
 
   return (
     <div className="card mb-4">
-      <h3 className="font-bold mb-4 flex items-center gap-2">
-        <span className="text-success"><Check size={20} /></span>
-        Đã phân tích & lưu tự động
-      </h3>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="font-bold flex items-center gap-2">
+          <span className="text-success"><Check size={20} /></span>
+          Đã phân tích & lưu tự động
+        </h3>
+        <button 
+          onClick={onClose}
+          className="text-muted hover:text-primary transition-colors"
+          title="Đóng"
+        >
+          <X size={20} />
+        </button>
+      </div>
       
       <div className="grid grid-cols-[1fr_2fr] gap-2 mb-4 text-[14px] items-center">
         <div className="text-muted">Khách hàng:</div>
@@ -167,7 +176,7 @@ export const AIPreview: React.FC<AIPreviewProps> = ({ isLoading, data, rawInput,
         )}
       </div>
 
-      <div className="p-3 bg-black/20 rounded-sm mb-4 text-[13px]">
+      <div className="p-3 bg-card/50 rounded-sm mb-4 text-[13px] border border-border/30">
         <span className="text-muted">Nhập liệu:</span> {rawInput}
       </div>
 
