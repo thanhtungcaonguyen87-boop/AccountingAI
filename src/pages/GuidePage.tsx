@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, MapPin, Search, Edit3, CheckCircle, ArrowLeft, Send, Sparkles } from 'lucide-react';
+import { BookOpen, MapPin, Search, Edit3, CheckCircle, ArrowLeft, Send, Sparkles, Smartphone } from 'lucide-react';
 
 export const GuidePage: React.FC = () => {
   const navigate = useNavigate();
@@ -72,6 +72,34 @@ export const GuidePage: React.FC = () => {
             desc="Khi khách hàng thanh toán, chỉ cần nhấn nút 'Đã trả' để đơn hàng được chuyển sang danh sách hoàn thành."
           />
         </section>
+        <section className="space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="bg-primary/20 p-2 rounded-lg">
+              <Smartphone size={20} className="text-primary" />
+            </div>
+            <h2 className="text-[20px] font-bold underline decoration-primary/40 underline-offset-4 decoration-2">Cài đặt ứng dụng (PWA)</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <button 
+              onClick={() => navigate('/guide/ios')}
+              className="flex flex-col items-center justify-center p-4 bg-card/40 rounded-2xl border border-border/20 hover:border-primary/30 transition-all gap-2"
+            >
+              <Smartphone size={32} className="text-primary" />
+              <span className="font-bold text-[14px]">Cho iPhone (iOS)</span>
+            </button>
+            <button 
+              onClick={() => navigate('/guide/android')}
+              className="flex flex-col items-center justify-center p-4 bg-card/40 rounded-2xl border border-border/20 hover:border-primary/30 transition-all gap-2"
+            >
+              <Smartphone size={32} className="text-success" />
+              <span className="font-bold text-[14px]">Cho Android</span>
+            </button>
+          </div>
+          <p className="text-[13px] text-muted text-center px-4 italic">
+            "Cài đặt để sử dụng như một ứng dụng điện thoại thực thụ, không cần tải từ App Store hay Play Store."
+          </p>
+        </section>
+
 
         <div className="bg-primary/10 rounded-2xl p-6 border border-primary/20">
           <h3 className="font-bold flex items-center gap-2 mb-3">

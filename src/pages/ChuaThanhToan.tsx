@@ -21,7 +21,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { toPng, toBlob } from "html-to-image";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 export const ChuaThanhToan: React.FC = () => {
   const { user } = useAuth();
@@ -31,8 +31,22 @@ export const ChuaThanhToan: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    {},
+    () => {
+      const saved = localStorage.getItem("expandedGroups_ChuaThanhToan");
+      try {
+        return saved ? JSON.parse(saved) : {};
+      } catch {
+        return {};
+      }
+    },
   );
+
+  useEffect(() => {
+    localStorage.setItem(
+      "expandedGroups_ChuaThanhToan",
+      JSON.stringify(expandedGroups),
+    );
+  }, [expandedGroups]);
 
   const [records, setRecords] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -56,9 +70,14 @@ export const ChuaThanhToan: React.FC = () => {
 
       if (!error && data) {
         setRecords(data);
-        // Auto expand first group
+        // Auto expand first group ONLY if no groups are currently expanded
         if (data.length > 0) {
-          setExpandedGroups({ [data[0].khach_hang]: true });
+          setExpandedGroups((prev) => {
+            if (Object.keys(prev).length === 0) {
+              return { [data[0].khach_hang]: true };
+            }
+            return prev;
+          });
         }
       }
       if (!silent) setIsLoadingData(false);
@@ -152,7 +171,7 @@ export const ChuaThanhToan: React.FC = () => {
             so_luong: result.quantity,
             don_gia: result.price,
             ghi_chu: result.note,
-            ngay: new Date().toISOString().split("T")[0], // yyyy-mm-dd
+            ngay: result.date || new Date().toISOString().split("T")[0], // yyyy-mm-dd
             nhap_lieu: text,
             user_id: user.id,
           },
@@ -265,6 +284,29 @@ export const ChuaThanhToan: React.FC = () => {
     }
   };
 
+  const handleManualSubmit = async (data: any) => {
+    if (!user) return;
+    const { error } = await supabase.from("chi_tiet").insert([
+      {
+        khach_hang: data.khach_hang,
+        san_pham: data.san_pham,
+        so_luong: data.so_luong,
+        don_gia: data.don_gia,
+        dvt: data.dvt,
+        ghi_chu: data.ghi_chu,
+        ngay: new Date().toISOString().split("T")[0], // yyyy-mm-dd
+        nhap_lieu: `Nhập thủ công: ${data.khach_hang} - ${data.san_pham}${data.ghi_chu ? ` (${data.ghi_chu})` : ""}`,
+        user_id: user.id,
+      },
+    ]);
+
+    if (error) {
+      throw error;
+    }
+
+    fetchRecords(true);
+  };
+
   const toggleGroup = (customer: string) => {
     setExpandedGroups((prev) => ({ ...prev, [customer]: !prev[customer] }));
   };
@@ -323,20 +365,103 @@ export const ChuaThanhToan: React.FC = () => {
           );
         }
       } else if (type === "xlsx") {
-        const data = customerItems.map((item) => ({
-          Ngày: item.ngay,
+        // 1. Chuẩn bị dữ liệu thô
+        const data = customerItems.map((item: any) => ({
+          "Ngày": item.ngay,
           "Sản phẩm": item.san_pham,
-          ĐVT: item.dvt,
-          "Số lượng": item.so_luong,
-          "Đơn giá": item.don_gia,
-          "Thành tiền": item.thanh_tien,
+          "ĐVT": item.dvt,
+          "Số lượng": Number(item.so_luong) || 0,
+          "Đơn giá": Number(item.don_gia) || 0,
+          "Thành tiền": Number(item.thanh_tien) || 0,
           "Ghi chú": item.ghi_chu || "",
         }));
 
-        const worksheet = XLSX.utils.json_to_sheet(data);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "CongNo");
-        XLSX.writeFile(workbook, `${fileName}.xlsx`);
+        // 2. Tính dòng Total
+        const totalAmount = data.reduce((sum: number, item: any) => sum + item["Thành tiền"], 0);
+        const totalRow = {
+          "Ngày": "TỔNG CỘNG",
+          "Sản phẩm": "", "ĐVT": "", "Số lượng": "", "Đơn giá": "",
+          "Thành tiền": totalAmount,
+          "Ghi chú": ""
+        };
+        
+        // Thêm dòng total vào cuối mảng data
+        const finalData = [...data, totalRow];
+
+        // 3. Tạo Worksheet
+        const ws = XLSX.utils.json_to_sheet(finalData);
+
+        // 4. Định dạng (Styling)
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        
+        // Thiết lập chiều cao dòng cho toàn bộ bảng (15 * 1.35 = 20.25)
+        ws['!rows'] = Array(range.e.r + 1).fill({ hpt: 20.25 });
+
+        // Duyệt qua từng cell để định dạng
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = ws[cellAddress];
+            if (!cell) continue;
+
+            const isHeader = R === 0;
+            const isTotal = R === range.e.r;
+            const value = cell.v;
+            const isNumber = typeof value === 'number';
+
+            // Định dạng chung cho tất cả cell
+            cell.s = {
+              alignment: { 
+                vertical: "center", 
+                horizontal: isHeader || (isTotal && C === 0) ? "center" : (isNumber ? "right" : "left") 
+              },
+              font: { name: "Arial", size: 10 },
+              border: {
+                top: { style: 'thin' },
+                bottom: { style: 'thin' },
+                left: { style: 'thin' },
+                right: { style: 'thin' }
+              }
+            };
+
+            // Định dạng số cho cột Số lượng, Đơn giá, Thành tiền (indices 3, 4, 5)
+            if (isNumber && (C >= 3 && C <= 5)) {
+              cell.z = "#,##0";
+            }
+
+            // Header (Dòng 0): In đậm, nền xám nhẹ
+            if (isHeader) {
+              cell.s.font.bold = true;
+              cell.s.fill = { fgColor: { rgb: "EEEEEE" } };
+            }
+
+            // Dòng cuối (Total Row): In đậm
+            if (isTotal) {
+              cell.s.font.bold = true;
+              cell.s.font.color = { rgb: "FF0000" }; // Chữ đỏ cho nổi
+            }
+          }
+        }
+
+        // Merge ô cho dòng TỔNG CỘNG (A:D)
+        ws['!merges'] = [
+          { s: { r: range.e.r, c: 0 }, e: { r: range.e.r, c: 3 } }
+        ];
+
+        // 5. Autofit Width
+        const colWidths = Object.keys(finalData[0]).map(key => {
+          const maxLength = Math.max(
+            key.toString().length,
+            ...finalData.map(row => (row[key as keyof typeof totalRow] ? row[key as keyof typeof totalRow].toString().length : 0))
+          );
+          return { wch: maxLength + 5 };
+        });
+        ws['!cols'] = colWidths;
+
+        // 6. Xuất file
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "CongNo");
+        XLSX.writeFile(wb, `${fileName}.xlsx`);
       } else if (type === "csv") {
         const headers =
           "Ngày,Sản phẩm,ĐVT,Số lượng,Đơn giá,Thành tiền,Ghi chú\n";
@@ -388,7 +513,11 @@ export const ChuaThanhToan: React.FC = () => {
     <div className="flex flex-col md:flex-row md:items-start gap-6 pb-8">
       <div className="md:sticky md:top-[65px] z-10 md:w-[35%] md:min-w-[320px]">
         {/* AI Input Section */}
-        <HeroInput onAnalyze={handleAnalyze} isLoading={isAnalyzing} />
+        <HeroInput
+          onAnalyze={handleAnalyze}
+          onManualSubmit={handleManualSubmit}
+          isLoading={isAnalyzing}
+        />
 
         {/* AI Processing / Preview */}
         {(isAnalyzing || parsedData) && (
@@ -529,7 +658,7 @@ export const ChuaThanhToan: React.FC = () => {
                                     })
                                   }
                                   placeholder="SL"
-                                  className={`${inputStyle} w-[60px]`}
+                                  className={`${inputStyle} !w-[20%]`}
                                 />
                                 <input
                                   type="text"
@@ -541,7 +670,7 @@ export const ChuaThanhToan: React.FC = () => {
                                     })
                                   }
                                   placeholder="ĐVT"
-                                  className={`${inputStyle} w-[60px]`}
+                                  className={`${inputStyle} !w-[22%]`}
                                 />
                                 <input
                                   type="number"

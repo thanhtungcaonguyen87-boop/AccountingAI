@@ -90,6 +90,12 @@
     box-shadow: 0 4px 14px 0 rgba(37, 123, 244, 0.39);
   }
 
+  .btn-success {
+    background: linear-gradient(135deg, #10b981, #059669);
+    @apply text-white hover:opacity-90;
+    box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3);
+  }
+
   .btn-outline {
     @apply bg-transparent border border-border text-main hover:bg-card;
   }

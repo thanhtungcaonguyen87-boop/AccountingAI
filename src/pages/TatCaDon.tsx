@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/static-components */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   Loader2,
@@ -18,7 +18,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { toPng, toBlob } from "html-to-image";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 type SortDir = "asc" | "desc" | null;
 type SortKey = "khach_hang" | "ngay";
@@ -190,18 +190,102 @@ export const TatCaDon: React.FC = () => {
         ]);
         alert("Đã sao chép!");
       } else if (type === "xlsx") {
+        // 1. Chuẩn bị dữ liệu thô
         const data = processedRecords.map((item) => ({
           "Khách hàng": item.khach_hang,
           "Ngày": item.ngay,
           "Sản phẩm": item.san_pham,
           "ĐVT": item.dvt,
-          "Số lượng": item.so_luong,
-          "Đơn giá": item.don_gia,
-          "Thành tiền": item.thanh_tien,
+          "Số lượng": Number(item.so_luong) || 0,
+          "Đơn giá": Number(item.don_gia) || 0,
+          "Thành tiền": Number(item.thanh_tien) || 0,
           "Trạng thái": item.id_thanh_toan ? "Đã TT" : "Chưa TT",
           "Ghi chú": item.ghi_chu || "",
         }));
-        const ws = XLSX.utils.json_to_sheet(data);
+
+        // 2. Tính dòng Total
+        const totalAmount = data.reduce((sum: number, item: any) => sum + item["Thành tiền"], 0);
+        const totalRow = {
+          "Khách hàng": "TỔNG CỘNG",
+          "Ngày": "", "Sản phẩm": "", "ĐVT": "", "Số lượng": "", "Đơn giá": "",
+          "Thành tiền": totalAmount,
+          "Trạng thái": "", "Ghi chú": ""
+        };
+        
+        // Thêm dòng total vào cuối mảng data
+        const finalData = [...data, totalRow];
+
+        // 3. Tạo Worksheet
+        const ws = XLSX.utils.json_to_sheet(finalData);
+
+        // 4. Định dạng (Styling)
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        
+        // Thiết lập chiều cao dòng cho toàn bộ bảng (15 * 1.35 = 20.25)
+        ws['!rows'] = Array(range.e.r + 1).fill({ hpt: 20.25 });
+
+        // Duyệt qua từng cell để định dạng
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = ws[cellAddress];
+            if (!cell) continue;
+
+            const isHeader = R === 0;
+            const isTotal = R === range.e.r;
+            const value = cell.v;
+            const isNumber = typeof value === 'number';
+
+            // Định dạng chung cho tất cả cell
+            cell.s = {
+              alignment: { 
+                vertical: "center", 
+                horizontal: isHeader || (isTotal && C === 0) ? "center" : (isNumber ? "right" : "left") 
+              },
+              font: { name: "Arial", size: 10 },
+              border: {
+                top: { style: 'thin' },
+                bottom: { style: 'thin' },
+                left: { style: 'thin' },
+                right: { style: 'thin' }
+              }
+            };
+
+            // Định dạng số cho cột Số lượng, Đơn giá, Thành tiền
+            if (isNumber && (C >= 4 && C <= 6)) {
+              cell.z = "#,##0";
+            }
+
+            // Header (Dòng 0): In đậm, nền xám nhẹ
+            if (isHeader) {
+              cell.s.font.bold = true;
+              cell.s.fill = { fgColor: { rgb: "EEEEEE" } };
+            }
+
+            // Dòng cuối (Total Row): In đậm
+            if (isTotal) {
+              cell.s.font.bold = true;
+              cell.s.font.color = { rgb: "FF0000" }; // Chữ đỏ cho nổi
+            }
+          }
+        }
+
+        // Merge ô cho dòng TỔNG CỘNG (A:D)
+        ws['!merges'] = [
+          { s: { r: range.e.r, c: 0 }, e: { r: range.e.r, c: 3 } }
+        ];
+
+        // 5. Autofit Width (Tính toán độ rộng cột dựa trên nội dung)
+        const colWidths = Object.keys(finalData[0]).map(key => {
+          const maxLength = Math.max(
+            key.toString().length,
+            ...finalData.map(row => (row[key as keyof typeof totalRow] ? row[key as keyof typeof totalRow].toString().length : 0))
+          );
+          return { wch: maxLength + 5 }; // Cộng thêm padding
+        });
+        ws['!cols'] = colWidths;
+
+        // 6. Xuất file
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "TatCaDon");
         XLSX.writeFile(wb, `${fileName}.xlsx`);
@@ -229,7 +313,7 @@ export const TatCaDon: React.FC = () => {
     setOpenExport(false);
   };
 
-  const processedRecords = useMemo(() => {
+  const processedRecords = (() => {
     // 1. Filter
     let filtered = records;
     if (search.trim()) {
@@ -284,7 +368,7 @@ export const TatCaDon: React.FC = () => {
         new Date(a.created_at || 0).getTime()
       );
     });
-  }, [records, search, sortConfig]);
+  })();
 
   const inputStyle = {
     width: "100%",

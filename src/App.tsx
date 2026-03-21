@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './pages/LoginPage';
 import { IntroPage } from './pages/IntroPage';
 import { GuidePage } from './pages/GuidePage';
+import { GuideIOS } from './pages/GuideIOS';
+import { GuideAndroid } from './pages/GuideAndroid';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { MainLayout } from './components/layout/MainLayout';
 import { ChuaThanhToan } from './pages/ChuaThanhToan';
@@ -26,6 +28,8 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/intro" element={<IntroPage />} />
       <Route path="/guide" element={<GuidePage />} />
+      <Route path="/guide/ios" element={<GuideIOS />} />
+      <Route path="/guide/android" element={<GuideAndroid />} />
       <Route path="/" element={
         <ProtectedRoute>
           <MainLayout />

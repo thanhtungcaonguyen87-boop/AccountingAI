@@ -15,7 +15,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { toPng, toBlob } from "html-to-image";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 export const DaThanhToan: React.FC = () => {
   const { user } = useAuth();
@@ -104,17 +104,101 @@ export const DaThanhToan: React.FC = () => {
         ]);
         alert("Đã sao chép vào bộ nhớ tạm!");
       } else if (type === "xlsx") {
+        // 1. Chuẩn bị dữ liệu thô
         const data = batchItems.map((item: any) => ({
           "Khách hàng": item.khach_hang,
-          Ngày: item.ngay,
+          "Ngày": item.ngay,
           "Sản phẩm": item.san_pham,
-          ĐVT: item.dvt,
-          "Số lượng": item.so_luong,
-          "Đơn giá": item.don_gia,
-          "Thành tiền": item.thanh_tien,
+          "ĐVT": item.dvt,
+          "Số lượng": Number(item.so_luong) || 0,
+          "Đơn giá": Number(item.don_gia) || 0,
+          "Thành tiền": Number(item.thanh_tien) || 0,
           "Ghi chú": item.ghi_chu || "",
         }));
-        const ws = XLSX.utils.json_to_sheet(data);
+
+        // 2. Tính dòng Total
+        const totalAmount = data.reduce((sum: number, item: any) => sum + item["Thành tiền"], 0);
+        const totalRow = {
+          "Khách hàng": "TỔNG CỘNG",
+          "Ngày": "", "Sản phẩm": "", "ĐVT": "", "Số lượng": "", "Đơn giá": "",
+          "Thành tiền": totalAmount,
+          "Ghi chú": ""
+        };
+        
+        // Thêm dòng total vào cuối mảng data
+        const finalData = [...data, totalRow];
+
+        // 3. Tạo Worksheet
+        const ws = XLSX.utils.json_to_sheet(finalData);
+
+        // 4. Định dạng (Styling)
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        
+        // Thiết lập chiều cao dòng cho toàn bộ bảng (15 * 1.35 = 20.25)
+        ws['!rows'] = Array(range.e.r + 1).fill({ hpt: 20.25 });
+
+        // Duyệt qua từng cell để định dạng
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = ws[cellAddress];
+            if (!cell) continue;
+
+            const isHeader = R === 0;
+            const isTotal = R === range.e.r;
+            const value = cell.v;
+            const isNumber = typeof value === 'number';
+
+            // Định dạng chung cho tất cả cell
+            cell.s = {
+              alignment: { 
+                vertical: "center", 
+                horizontal: isHeader || (isTotal && C === 0) ? "center" : (isNumber ? "right" : "left") 
+              },
+              font: { name: "Arial", size: 10 },
+              border: {
+                top: { style: 'thin' },
+                bottom: { style: 'thin' },
+                left: { style: 'thin' },
+                right: { style: 'thin' }
+              }
+            };
+
+            // Định dạng số cho cột Số lượng, Đơn giá, Thành tiền
+            if (isNumber && (C >= 4 && C <= 6)) {
+              cell.z = "#,##0";
+            }
+
+            // Header (Dòng 0): In đậm, nền xám nhẹ
+            if (isHeader) {
+              cell.s.font.bold = true;
+              cell.s.fill = { fgColor: { rgb: "EEEEEE" } };
+            }
+
+            // Dòng cuối (Total Row): In đậm
+            if (isTotal) {
+              cell.s.font.bold = true;
+              cell.s.font.color = { rgb: "FF0000" }; // Chữ đỏ cho nổi
+            }
+          }
+        }
+
+        // Merge ô cho dòng TỔNG CỘNG (A:D)
+        ws['!merges'] = [
+          { s: { r: range.e.r, c: 0 }, e: { r: range.e.r, c: 3 } }
+        ];
+
+        // 5. Autofit Width
+        const colWidths = Object.keys(finalData[0]).map(key => {
+          const maxLength = Math.max(
+            key.toString().length,
+            ...finalData.map(row => (row[key as keyof typeof totalRow] ? row[key as keyof typeof totalRow].toString().length : 0))
+          );
+          return { wch: maxLength + 5 };
+        });
+        ws['!cols'] = colWidths;
+
+        // 6. Xuất file
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "DaThanhToan");
         XLSX.writeFile(wb, `${fileName}.xlsx`);
@@ -187,14 +271,8 @@ export const DaThanhToan: React.FC = () => {
         </div>
       ) : (
         filteredCustomers.map((khach_hang) => (
-          <div key={khach_hang} className="mb-8">
-            {/* Customer Header */}
-            <div className="flex items-center gap-2 mb-3 px-1">
-              <CheckCircle size={20} className="text-success" />
-              <h3 className="font-bold text-[16px]">{khach_hang}</h3>
-            </div>
-
-            {/* Payment Batches for this Customer */}
+          <div key={khach_hang} className="mb-4">
+            {/* Payment Batches per Customer */}
             {Object.keys(groupedData[khach_hang]).map((batchId) => {
               const batchItems = groupedData[khach_hang][batchId];
               const batchTotal = batchItems.reduce(
@@ -213,11 +291,17 @@ export const DaThanhToan: React.FC = () => {
               }
 
               return (
-                <div
-                  key={batchId}
-                  id={`batch-card-${batchId}`}
-                  className="card mb-4 p-0 overflow-hidden"
+                <div 
+                  key={batchId} 
+                  id={`batch-card-${batchId}`} 
+                  className="mb-8 p-1"
                 >
+                  {/* Tiêu đề Khách hàng (Được đưa vào ID để capture khi xuất ảnh) */}
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <CheckCircle size={20} className="text-success" />
+                    <h3 className="font-bold text-[16px]">{khach_hang}</h3>
+                  </div>
+                  <div className="card p-0 overflow-hidden shadow-xl">
                   <div
                     className="flex items-center justify-between p-4 cursor-pointer bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.04)] transition-colors"
                     onClick={() => toggleBatch(batchId)}
@@ -410,11 +494,12 @@ export const DaThanhToan: React.FC = () => {
                     </div>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        ))
-      )}
-    </div>
-  );
+              </div>
+            );
+          })}
+        </div>
+      ))
+    )}
+  </div>
+);
 };
