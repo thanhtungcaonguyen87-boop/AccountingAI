@@ -3,12 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   MoreVertical,
   Smartphone,
-  CheckCircle,
   Wallet,
-  Home,
-  LayoutDashboard,
-  History,
-  Settings,
   ArrowLeft,
   HelpCircle,
 } from "lucide-react";

@@ -3,10 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Share2,
   PlusSquare,
-  Home,
-  LayoutDashboard,
-  History,
-  Settings,
   ArrowLeft,
   HelpCircle,
   Wallet,
